@@ -46,6 +46,20 @@ class GenNinjaDependencyTests(unittest.TestCase):
         self.assertNotIn("font/ttf/", source_section)
         self.assertIn("font/hankaku.bin", self.text)
 
+    def test_serial_runtime_is_present_in_kernel_build_graph(self) -> None:
+        serial_source = ROOT / "driver/serial/serial_port.cpp"
+        self.assertTrue(serial_source.is_file())
+        ignored = subprocess.run(
+            ["git", "check-ignore", "--quiet", str(serial_source.relative_to(ROOT))],
+            cwd=ROOT,
+            check=False,
+        )
+        self.assertNotEqual(0, ignored.returncode)
+        self.assertIn(
+            "build out/driver/serial/serial_port.o: root_cxx driver/serial/serial_port.cpp",
+            self.text,
+        )
+
 
 class GenNinjaLogTests(unittest.TestCase):
     @classmethod
