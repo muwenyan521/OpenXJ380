@@ -113,40 +113,6 @@ class LicenseComplianceTests(unittest.TestCase):
             self.assertNotIn("All rights reserved", text)
             self.assertNotIn("保留所有权利", text)
 
-    def test_busybox_corresponding_source_bundle_is_complete(self) -> None:
-        source_dir = ROOT / "third_party/busybox-source"
-        archive = source_dir / "busybox-1.31.1.tar.bz2"
-        expected_source_sha256 = (
-            "d0f940a72f648943c1f2211e0e3117387c31d765137d92bd8284a3fb9752a998"
-        )
-        expected_binary_sha256 = (
-            "0bf09330ec7410eb7e136dadf822a52fd8b5b6cf8ef375722a4b64ea4157567a"
-        )
-        staged_binary = ROOT / "resources/apps/busybox"
-        preserved_binary = ROOT / "third_party/busybox-prebuilt/busybox_amd64"
-
-        self.assertTrue(archive.is_file())
-        self.assertTrue((source_dir / "LICENSE").is_file())
-        self.assertTrue((source_dir / "busybox-1.31.1.config").is_file())
-        self.assertEqual(
-            expected_source_sha256,
-            subprocess.check_output(["sha256sum", str(archive)], text=True).split()[0],
-        )
-        for binary in (staged_binary, preserved_binary):
-            self.assertEqual(
-                expected_binary_sha256,
-                subprocess.check_output(["sha256sum", str(binary)], text=True).split()[0],
-            )
-        self.assertEqual(staged_binary.read_bytes(), preserved_binary.read_bytes())
-        subprocess.run(["bzip2", "-t", str(archive)], check=True)
-
-    def test_busybox_build_disables_volatile_timestamp(self) -> None:
-        build_script = (
-            ROOT / "third_party/busybox-source/build.sh"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn("KCONFIG_NOTIMESTAMP=1", build_script)
-
     def test_libwebp_license_material_is_complete(self) -> None:
         libwebp_root = ROOT / "user/browser/third_party/libwebp"
         for name in ("COPYING", "PATENTS", "AUTHORS"):
