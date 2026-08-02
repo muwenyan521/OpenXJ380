@@ -84,3 +84,8 @@ Large prepared image caches under `Bf/` are not source-of-truth license records.
 If a complete image consumes additional prebuilt package material, keep its
 source, license, version, and checksum records with the compliance material, not
 only in the local cache.
+
+QEMU runs use host-provided OVMF firmware instead of distributing a firmware
+blob in the repository. Install the distro `ovmf`/`edk2-ovmf` package or set
+`OVMF_FIRMWARE=/absolute/path/to/OVMF.fd` before `ninja run` or `ninja justrun`
+when the default system paths are not available.

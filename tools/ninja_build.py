@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -11,6 +12,14 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+OVMF_FIRMWARE_CANDIDATES = (
+    Path("/usr/share/edk2/x64/OVMF.4m.fd"),
+    Path("/usr/share/edk2/x64/OVMF_CODE.4m.fd"),
+    Path("/usr/share/OVMF/OVMF_CODE.fd"),
+    Path("/usr/share/edk2-ovmf/x64/OVMF_CODE.fd"),
+    Path("/usr/share/qemu/OVMF.fd"),
+    Path("/usr/share/ovmf/OVMF.fd"),
+)
 
 XBPS_BOOTSTRAP_BASE = (
     "base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar "
@@ -51,6 +60,26 @@ def capture(args: list[str]) -> str:
         return subprocess.check_output(args, cwd=str(ROOT), text=True, stderr=subprocess.DEVNULL).strip()
     except Exception:
         return ""
+
+
+def ovmf_firmware() -> Path:
+    override = os.environ.get("OVMF_FIRMWARE")
+    if override:
+        firmware = Path(override).expanduser()
+        if not firmware.is_absolute():
+            firmware = ROOT / firmware
+        if firmware.is_file():
+            return firmware
+        raise FileNotFoundError(f"OVMF_FIRMWARE does not point to a file: {firmware}")
+
+    for firmware in OVMF_FIRMWARE_CANDIDATES:
+        if firmware.is_file():
+            return firmware
+
+    raise FileNotFoundError(
+        "missing OVMF firmware; install the distro OVMF/edk2-ovmf package "
+        "or set OVMF_FIRMWARE=/path/to/OVMF.fd"
+    )
 
 
 def chmod_rw(path: Path) -> None:
@@ -349,8 +378,9 @@ def qemu_cmd() -> str:
             "-drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw "
             "-device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk,bootindex=0"
         )
+    firmware = shlex.quote(str(ovmf_firmware()))
     return (
-        f"{sudo_cmd}qemu-system-x86_64 --display {env('DISPLAY_BACKEND', 'gtk')} -M q35 -bios OVMF.fd "
+        f"{sudo_cmd}qemu-system-x86_64 --display {env('DISPLAY_BACKEND', 'gtk')} -M q35 -bios {firmware} "
         f"-m 8192 -smp {env('SMP', '4')} {kvm_flag} -device qemu-xhci,id=xhci {storage} "
         "-boot strict=on "
         f"{env('USB_XHCI_DEVICES', '-device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2')} "
@@ -363,7 +393,11 @@ def qemu_cmd() -> str:
 
 def run_qemu() -> None:
     (ROOT / "serial.log").unlink(missing_ok=True)
-    shell(qemu_cmd())
+    try:
+        command = qemu_cmd()
+    except FileNotFoundError as error:
+        raise SystemExit(str(error)) from None
+    shell(command)
 
 
 def clean() -> None:

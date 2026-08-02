@@ -44,6 +44,13 @@ class LicenseComplianceTests(unittest.TestCase):
 
         self.assertEqual([], referenced_by)
 
+    def test_root_ovmf_firmware_is_not_distributed(self) -> None:
+        self.assertFalse((ROOT / "OVMF.fd").exists())
+        tracked_paths = subprocess.check_output(
+            ["git", "ls-files", "OVMF.fd"], cwd=ROOT, text=True
+        ).splitlines()
+        self.assertEqual([], tracked_paths)
+
     def test_mbedtls_apache_selection_is_machine_readable(self) -> None:
         selection = json.loads(
             (ROOT / "third_party/mbedtls-license-selection.json").read_text(encoding="utf-8")

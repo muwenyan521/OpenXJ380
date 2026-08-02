@@ -41,7 +41,7 @@ sudo apt update
 sudo apt install -y \
     clang lld nasm ninja-build \
     mtools gdisk dosfstools \
-    qemu-system-x86 qemu-utils
+    qemu-system-x86 qemu-utils ovmf
 ```
 
 构建依赖 `Python 3`、Clang/LLD、NASM 和 Ninja。生成镜像还需要 `mtools`、`gdisk` 与 `dosfstools`；运行镜像需要 QEMU。可通过生成后的 Ninja 目标检查本机工具链：
@@ -114,6 +114,8 @@ DEBUG=0 SMP=2 SUDO=0 KVM=0 DISPLAY_BACKEND=gtk ninja -f build.ninja run
 - `SUDO`：是否通过 `sudo` 启动需要权限的流程，默认 `1`。
 - `KVM`：是否启用 KVM，默认 `1`。
 - `DISPLAY_BACKEND`：QEMU 显示后端，默认 `gtk`。
+- `OVMF_FIRMWARE`：UEFI 固件路径。默认会查找常见发行版路径，例如
+  `/usr/share/edk2/x64/OVMF.4m.fd` 和 `/usr/share/OVMF/OVMF_CODE.fd`。
 
 ## 开发说明
 
