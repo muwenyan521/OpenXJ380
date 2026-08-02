@@ -16,6 +16,14 @@ class KrlibcFormatterTests(unittest.TestCase):
         self.assertNotIn("LEFT adjust", source)
         self.assertNotIn("Write the zero padding", source)
 
+    def test_strtol_has_no_bsd_or_musl_markers(self) -> None:
+        source = (ROOT / "kernel/krlibc.cpp").read_text(encoding="utf-8")
+
+        self.assertNotIn("goto noconv", source)
+        self.assertNotIn("LONG_MIN + LONG_MAX", source)
+        self.assertNotIn("any < 0", source)
+        self.assertNotIn("cutlim", source)
+
 
 if __name__ == "__main__":
     unittest.main()
