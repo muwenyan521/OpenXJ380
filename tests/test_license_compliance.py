@@ -61,6 +61,58 @@ class LicenseComplianceTests(unittest.TestCase):
             "Apache-2.0 OR GPL-2.0-or-later", selection["upstream_license_expression"]
         )
 
+    def test_mikanos_hankaku_source_material_is_complete(self) -> None:
+        source_root = ROOT / "third_party/mikanos-hankaku"
+        text_source = source_root / "hankaku.txt"
+        license_path = source_root / "LICENSE"
+        source_record = source_root / "SOURCE.md"
+        font_binary = ROOT / "font/hankaku.bin"
+
+        for material in (text_source, license_path, source_record, font_binary):
+            self.assertTrue(material.is_file(), str(material.relative_to(ROOT)))
+
+        compiled = bytearray()
+        for line in text_source.read_text(encoding="utf-8").splitlines():
+            if len(line) != 8 or not set(line) <= {".", "@"}:
+                continue
+            value = 0
+            for pixel in line:
+                value = (value << 1) | int(pixel == "@")
+            compiled.append(value)
+
+        self.assertEqual(font_binary.read_bytes(), bytes(compiled))
+        self.assertIn("Apache License", license_path.read_text(encoding="utf-8"))
+        record_text = source_record.read_text(encoding="utf-8")
+        self.assertIn("uchan-nos/mikanos", record_text)
+        self.assertIn("b5f7740c04002e67a95af16a5c6e073b664bf3f5", record_text)
+
+        manifest = json.loads(
+            (ROOT / "third_party/compliance-manifest.json").read_text(encoding="utf-8")
+        )
+        hankaku = next(component for component in manifest["components"] if component["slug"] == "mikanos-hankaku")
+        self.assertEqual("Apache-2.0", hankaku["license"])
+        self.assertEqual(
+            ["third_party/mikanos-hankaku/LICENSE", "third_party/mikanos-hankaku/SOURCE.md"],
+            hankaku["license_files"],
+        )
+        self.assertEqual(
+            ["third_party/mikanos-hankaku/hankaku.txt", "font/hankaku.bin"],
+            hankaku["source_files"],
+        )
+        self.assertTrue(hankaku["bundle_source"])
+
+        notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+        root_licenses = (ROOT / "LICENSES.md").read_text(encoding="utf-8")
+        self.assertIn("MikanOS hankaku font", notices)
+        self.assertIn("third_party/mikanos-hankaku/LICENSE", notices)
+        self.assertIn("MikanOS hankaku font", root_licenses)
+
+    def test_mikanos_derived_headers_do_not_claim_all_rights_reserved(self) -> None:
+        for relative_path in ("include/efi/fbc.h", "boot/include/fbc.h", "include/graphics/GOP.hpp"):
+            text = (ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertNotIn("All rights reserved", text)
+            self.assertNotIn("保留所有权利", text)
+
     def test_busybox_corresponding_source_bundle_is_complete(self) -> None:
         source_dir = ROOT / "third_party/busybox-source"
         archive = source_dir / "busybox-1.31.1.tar.bz2"
