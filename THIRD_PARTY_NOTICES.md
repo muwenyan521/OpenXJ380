@@ -8,11 +8,13 @@ generates a distributable bundle at `out/compliance/third-party`.
 
 | Component | Selected license | Material |
 |---|---|---|
-| musl ELF definitions | MIT | `third_party/musl-elf` |
+| musl ELF definitions | MIT | `third_party/musl-elf/COPYRIGHT`; `third_party/musl-elf/SOURCE.md`; `include/elf.h` |
 | lwIP | BSD-3-Clause | `kmod/netserver/lwip` |
 | FatFs | BSD-style permissive | `driver/fs/fatfs` |
 | stb libraries | MIT OR Unlicense | embedded in headers |
 | dr_mp3 | MIT-0 OR Unlicense | `include/dr_mp3.h` |
+| libutf | MIT | `third_party/libutf/LICENSE`; `third_party/libutf/SOURCE.md`; `kernel/utflib.cpp`; `include/proto.hpp` |
+| Linux UAPI ioctl definitions | GPL-2.0 WITH Linux-syscall-note | `third_party/linux-uapi/COPYING`; `third_party/linux-uapi/GPL-2.0`; `third_party/linux-uapi/Linux-syscall-note`; `third_party/linux-uapi/SOURCE.md`; `include/ioctl.h` |
 | litehtml | BSD-3-Clause | `third_party/litehtml/LICENSE` |
 | Gumbo Parser | Apache-2.0 | `third_party/litehtml/src/gumbo/LICENSE` |
 | libvterm | MIT | `third_party/libvterm/LICENSE` |
@@ -23,7 +25,7 @@ generates a distributable bundle at `out/compliance/third-party`.
 | StardustUI | MIT | `frameworks/StardustUI/LICENSE` |
 | Xiaolai SC font | OFL-1.1 | `frameworks/StardustUI/fonts/LICENSES.md`; `frameworks/StardustUI/fonts/xiaolai.ttf` |
 | RapidJSON | MIT | embedded in `rapidjson.h` |
-| Rust alloc/compiler_builtins | Apache-2.0 OR MIT | `third_party/rust-runtime` |
+| Rust alloc/compiler_builtins | Apache-2.0 OR MIT | `third_party/rust-runtime/LICENSE-APACHE`; `third_party/rust-runtime/LICENSE-MIT`; `third_party/rust-runtime/SOURCE.md`; `licenses/liballoc.txt`; `liballoc-x86_64.a` |
 | BusyBox 1.31.1 | GPL-2.0-only | `third_party/busybox-source` |
 | MikanOS hankaku font | Apache-2.0 | `third_party/mikanos-hankaku/LICENSE`; `third_party/mikanos-hankaku/SOURCE.md`; `third_party/mikanos-hankaku/hankaku.txt`; `font/hankaku.bin` |
 | maple-font | OFL-1.1 | `font/ttf/LICENSES.md`; `font/ttf/XJ380C.ttf` |

@@ -1,4 +1,5 @@
-/* See LICENSE file for copyright and license details. */
+/* SPDX-License-Identifier: MIT */
+/* Source: suckless libutf; see third_party/libutf/SOURCE.md. */
 #include <proto.hpp>
 
 /* lookup table for the number of bytes expected in a sequence */

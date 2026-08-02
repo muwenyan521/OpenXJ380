@@ -10,8 +10,10 @@ binary distribution. The command-line image installs the repository notices at
 | --- | --- | --- | --- |
 | FatFs | ChaN permissive license | `driver/fs/fatfs/ff.cpp` | `fatfs.txt` |
 | lwIP | BSD-style | `kmod/netserver/lwip/` | `lwip.txt` |
-| GNU libc `elf.h` | LGPL-2.1-or-later | `include/elf.h` | `glibc-elf-h.txt` |
-| liballoc | Upstream license required | `liballoc-x86_64.a` origin | `liballoc.txt` |
+| musl ELF definitions | MIT | `include/elf.h`; `third_party/musl-elf` | `musl-elf.txt`; `third-party compliance bundle` |
+| Rust alloc/compiler_builtins archive | Apache-2.0 OR MIT | `liballoc-x86_64.a`; `third_party/rust-runtime` | `liballoc.txt`; `third-party compliance bundle` |
+| Linux UAPI ioctl definitions | GPL-2.0 WITH Linux-syscall-note | `include/ioctl.h`; `third_party/linux-uapi` | `third-party compliance bundle` |
+| libutf | MIT | `kernel/utflib.cpp`; `include/proto.hpp`; `third_party/libutf` | `third-party compliance bundle` |
 | XJ380 project notices | Project notice | `THIRD_PARTY_NOTICES.md` | `THIRD_PARTY_NOTICES.md` |
 | MikanOS hankaku font | Apache-2.0 | `third_party/mikanos-hankaku`; `font/hankaku.bin` | `third-party compliance bundle` |
 | maple-font | OFL-1.1 | `font/ttf/LICENSES.md`; `font/ttf/XJ380C.ttf` | `third-party compliance bundle` |
