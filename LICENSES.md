@@ -14,6 +14,7 @@ binary distribution. The command-line image installs the repository notices at
 | Rust alloc/compiler_builtins archive | Apache-2.0 OR MIT | `liballoc-x86_64.a`; `third_party/rust-runtime` | `liballoc.txt`; `third-party compliance bundle` |
 | Linux UAPI ioctl definitions | GPL-2.0 WITH Linux-syscall-note | `include/ioctl.h`; `third_party/linux-uapi` | `third-party compliance bundle` |
 | libutf | MIT | `kernel/utflib.cpp`; `include/proto.hpp`; `third_party/libutf` | `third-party compliance bundle` |
+| parson JSON parser | MIT | `lib/xapi_json_impl.inc`; `third_party/parson` | `third-party compliance bundle` |
 | XJ380 project notices | Project notice | `THIRD_PARTY_NOTICES.md` | `THIRD_PARTY_NOTICES.md` |
 | MikanOS hankaku font | Apache-2.0 | `third_party/mikanos-hankaku`; `font/hankaku.bin` | `third-party compliance bundle` |
 | maple-font | OFL-1.1 | `font/ttf/LICENSES.md`; `font/ttf/XJ380C.ttf` | `third-party compliance bundle` |
