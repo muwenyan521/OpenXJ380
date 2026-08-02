@@ -21,6 +21,7 @@ generates a distributable bundle at `out/compliance/third-party`.
 | Mbed TLS | Apache-2.0 | `third_party/mbedtls-license-selection.json` |
 | Lexbor | Apache-2.0 | `third_party/lexbor/LICENSE` and `NOTICE` |
 | StardustUI | MIT | `frameworks/StardustUI/LICENSE` |
+| Xiaolai SC font | OFL-1.1 | `frameworks/StardustUI/fonts/LICENSES.md`; `frameworks/StardustUI/fonts/xiaolai.ttf` |
 | RapidJSON | MIT | embedded in `rapidjson.h` |
 | Rust alloc/compiler_builtins | Apache-2.0 OR MIT | `third_party/rust-runtime` |
 | BusyBox 1.31.1 | GPL-2.0-only | `third_party/busybox-source` |
