@@ -63,7 +63,7 @@ UINT64 strcmp(char *from_str, char *cmp_str);
 
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 
-char *Hex2Char(unsigned long long hex);
+BOOLEAN Hex2Char(unsigned long long hex, char *buffer, UINTN capacity);
 
-char *Dec2Char(unsigned long long dec);
+BOOLEAN Dec2Char(unsigned long long dec, char *buffer, UINTN capacity);
 #endif // _BOOTLIB_H_

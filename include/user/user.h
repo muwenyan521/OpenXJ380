@@ -3,6 +3,11 @@
 #include <stdint.h>
 
 #include "./settings.h"
+#include "./password.h"
+
+#define USER_REGISTRY_MAGIC    0x5552584aU
+#define USER_REGISTRY_VERSION  2U
+#define USER_REGISTRY_MAX_USERS 128U
 
 typedef enum
 {
@@ -31,13 +36,26 @@ typedef struct
     char          **envp;       // 环境变量指针
     size_t          envc;       // 环境变量数量
     int             fgproc;     // 前台进程
-    char            password[64];   // 用户密码
 } UserInfo;
 
 typedef struct
 {
-    int         user_count; // 用户数量
-    UserInfo    uinf[128];  // 用户信息
+    char            name[64]; // 用户名
+    UserType        user_type; // 用户等级
+    UserPermisson   user_prms; // 用户权限（仅等级为Custom时可用）
+    uint32_t        kdf_algorithm;
+    uint32_t        kdf_iterations;
+    uint8_t         salt[USER_PASSWORD_SALT_SIZE];
+    uint8_t         verifier[USER_PASSWORD_VERIFIER_SIZE];
+} UserRegistryEntry;
+
+typedef struct
+{
+    uint32_t          magic;
+    uint32_t          version;
+    uint32_t          user_count; // 用户数量
+    uint32_t          entry_size; // UserRegistryEntry 大小，便于后续版本迁移
+    UserRegistryEntry uinf[USER_REGISTRY_MAX_USERS];  // 用户信息
 } UserRegisterList;
 
 void init_user();

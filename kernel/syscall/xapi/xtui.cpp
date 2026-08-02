@@ -208,7 +208,7 @@ uint64_t do_xapi_UserLogin(uint64_t username, uint64_t password)
     char *kpassword = NULL;
     int ret = xapi_copy_string_from_user(&kusername, (const char *)username, sizeof(((UserInfo *)0)->name));
     if (ret < 0) return (uint64_t)ret;
-    ret = xapi_copy_string_from_user(&kpassword, (const char *)password, sizeof(((UserInfo *)0)->password));
+    ret = xapi_copy_string_from_user(&kpassword, (const char *)password, USER_PASSWORD_INPUT_MAX);
     if (ret < 0)
     {
         free(kusername);
@@ -216,6 +216,7 @@ uint64_t do_xapi_UserLogin(uint64_t username, uint64_t password)
     }
 
     ret = user_session_login(kusername, kpassword);
+    user_password_clear(kpassword, USER_PASSWORD_INPUT_MAX);
     free(kusername);
     free(kpassword);
     return (uint64_t)ret;
@@ -227,7 +228,7 @@ uint64_t do_xapi_UserCreateFirst(uint64_t username, uint64_t password)
     char *kpassword = NULL;
     int ret = xapi_copy_string_from_user(&kusername, (const char *)username, sizeof(((UserInfo *)0)->name));
     if (ret < 0) return (uint64_t)ret;
-    ret = xapi_copy_string_from_user(&kpassword, (const char *)password, sizeof(((UserInfo *)0)->password));
+    ret = xapi_copy_string_from_user(&kpassword, (const char *)password, USER_PASSWORD_INPUT_MAX);
     if (ret < 0)
     {
         free(kusername);
@@ -235,6 +236,7 @@ uint64_t do_xapi_UserCreateFirst(uint64_t username, uint64_t password)
     }
 
     ret = user_session_create_first(kusername, kpassword);
+    user_password_clear(kpassword, USER_PASSWORD_INPUT_MAX);
     free(kusername);
     free(kpassword);
     return (uint64_t)ret;

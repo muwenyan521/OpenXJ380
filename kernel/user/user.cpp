@@ -480,12 +480,30 @@ static void backspace_input_char(char *buf)
 
 #endif
 
-static bool user_registry_login_entry_valid(const UserInfo *user)
+typedef struct
 {
-    if (user == NULL || user->name[0] == '\0') return false;
-    if (user->user_type == XUT_Root || user->user_type == XUT_System) return false;
-    if (user->user_type < XUT_Root || user->user_type > XUT_Custom) return false;
-    for (const char *p = user->name; *p != '\0'; p++)
+    char            name[64];
+    UserType        user_type;
+    UserPermisson   user_prms;
+    char          **envp;
+    size_t          envc;
+    int             fgproc;
+    char            password[USER_PASSWORD_INPUT_MAX];
+} LegacyUserInfo;
+
+typedef struct
+{
+    int            user_count;
+    LegacyUserInfo uinf[USER_REGISTRY_MAX_USERS];
+} LegacyUserRegisterList;
+
+static bool user_registry_name_ok(const char *name)
+{
+    if (name == NULL || name[0] == '\0') return false;
+    if (name[0] == ' ') return false;
+    size_t len = strlen(name);
+    if (len == 0 || len >= sizeof(((UserInfo *)0)->name) || name[len - 1] == ' ') return false;
+    for (const char *p = name; *p != '\0'; p++)
     {
         if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
               (*p >= '0' && *p <= '9') || *p == '_' || *p == '-' || *p == ' '))
@@ -494,60 +512,85 @@ static bool user_registry_login_entry_valid(const UserInfo *user)
     return true;
 }
 
-static bool user_registry_needs_oobe(UserRegisterList *urf_data, size_t bytes_read)
+static bool user_registry_user_type_valid(UserType user_type)
 {
-    if (urf_data == NULL) return true;
-    if (bytes_read < sizeof(UserRegisterList)) return true;
-    if (urf_data->user_count <= 1 || urf_data->user_count > 128) return true;
-    for (int i = 1; i < urf_data->user_count; i++)
-    {
-        if (user_registry_login_entry_valid(&urf_data->uinf[i])) return false;
-    }
+    return user_type >= XUT_Root && user_type <= XUT_Custom;
+}
+
+static bool user_registry_login_type_valid(UserType user_type)
+{
+    return user_type != XUT_Root && user_type != XUT_System && user_registry_user_type_valid(user_type);
+}
+
+static bool user_registry_header_valid(const UserRegisterList *registry, size_t bytes_read)
+{
+    size_t header_size = offsetof(UserRegisterList, uinf);
+    if (registry == NULL || bytes_read < header_size) return false;
+    if (registry->magic != USER_REGISTRY_MAGIC || registry->version != USER_REGISTRY_VERSION) return false;
+    if (registry->entry_size != sizeof(UserRegistryEntry) ||
+        registry->user_count > USER_REGISTRY_MAX_USERS)
+        return false;
+
+    size_t entries_size = (size_t)registry->user_count * sizeof(UserRegistryEntry);
+    if (registry->user_count != 0 && entries_size / registry->user_count != sizeof(UserRegistryEntry))
+        return false;
+    return bytes_read >= header_size + entries_size;
+}
+
+static bool user_registry_login_entry_valid(const UserRegistryEntry *user)
+{
+    if (user == NULL || !user_registry_name_ok(user->name)) return false;
+    if (!user_registry_login_type_valid(user->user_type)) return false;
+    return user->kdf_algorithm == USER_PASSWORD_KDF_PBKDF2_SHA256 && user->kdf_iterations != 0;
+}
+
+static bool user_legacy_login_entry_valid(const LegacyUserInfo *user, size_t entry_end, size_t bytes_read)
+{
+    if (entry_end > bytes_read) return false;
+    if (user == NULL || !user_registry_name_ok(user->name)) return false;
+    if (!user_registry_login_type_valid(user->user_type)) return false;
+    return user->password[0] != '\0';
+}
+
+static void user_registry_init_header(UserRegisterList *registry)
+{
+    memset(registry, 0, sizeof(*registry));
+    registry->magic      = USER_REGISTRY_MAGIC;
+    registry->version    = USER_REGISTRY_VERSION;
+    registry->entry_size = sizeof(UserRegistryEntry);
+    registry->user_count = 1;
+    strcpy(registry->uinf[0].name, "Root");
+    registry->uinf[0].user_type = XUT_Root;
+}
+
+static void user_registry_entry_set_public(UserInfo *out, const UserRegistryEntry *entry)
+{
+    memset(out, 0, sizeof(*out));
+    strncpy(out->name, entry->name, sizeof(out->name) - 1);
+    out->user_type = entry->user_type;
+    out->user_prms = entry->user_prms;
+}
+
+static bool user_registry_entry_set_password(UserRegistryEntry *entry, const char *password)
+{
+    if (entry == NULL || password == NULL || password[0] == '\0') return false;
+    if (strlen(password) >= USER_PASSWORD_INPUT_MAX) return false;
+    entry->kdf_algorithm  = USER_PASSWORD_KDF_PBKDF2_SHA256;
+    entry->kdf_iterations = USER_PASSWORD_KDF_ITERATIONS;
+    user_password_fill_salt(entry->salt);
+    user_password_make_verifier(password, entry->salt, entry->kdf_iterations, entry->verifier);
     return true;
 }
 
-static bool user_registry_has_real_user(const UserRegisterList *registry)
+static bool user_registry_entry_password_matches(const UserRegistryEntry *entry, const char *password)
 {
-    if (registry == NULL || registry->user_count <= 1 || registry->user_count > 128) return false;
-    for (int i = 1; i < registry->user_count; i++)
-    {
-        if (user_registry_login_entry_valid(&registry->uinf[i])) return true;
-    }
-    return false;
+    if (!user_registry_login_entry_valid(entry) || password == NULL) return false;
+    return user_password_verify(password, entry->salt, entry->kdf_iterations, entry->verifier);
 }
 
-static bool user_registry_first_user_matches(const UserRegisterList *registry, const char *username,
-                                             const char *password)
+static bool write_user_registry(const UserRegisterList *registry)
 {
-    if (registry == NULL || username == NULL || password == NULL) return false;
-    if (registry->user_count <= 1 || registry->user_count > 128) return false;
-
-    for (int i = 1; i < registry->user_count; i++)
-    {
-        if (!user_registry_login_entry_valid(&registry->uinf[i])) continue;
-        return strcmp(username, registry->uinf[i].name) == 0 && strcmp(password, registry->uinf[i].password) == 0;
-    }
-    return false;
-}
-
-static bool load_user_registry(UserRegisterList *registry, size_t *bytes_read)
-{
-    if (registry == NULL) return false;
-    memset(registry, 0, sizeof(UserRegisterList));
-    if (bytes_read != NULL) *bytes_read = 0;
-
-    vfs_node_t node = vfs_open("/system/config/usereg.dat");
-    if (node == NULL) return false;
-
-    size_t read_size = vfs_read(node, registry, 0, sizeof(UserRegisterList));
-    vfs_close(node);
-    if (bytes_read != NULL) *bytes_read = read_size;
-    return read_size >= sizeof(int);
-}
-
-static bool write_first_user_registry(const char *username, const char *password)
-{
-    if (username == NULL || password == NULL) return false;
+    if (registry == NULL || !user_registry_header_valid(registry, sizeof(UserRegisterList))) return false;
 
     vfs_mkdir("/system");
     vfs_mkdir("/system/config");
@@ -560,33 +603,154 @@ static bool write_first_user_registry(const char *username, const char *password
     }
     if (file == NULL) return false;
 
-    UserRegisterList registry;
-    memset(&registry, 0, sizeof(registry));
-    registry.user_count = 2;
-    strcpy(registry.uinf[0].name, "Root");
-    strcpy(registry.uinf[0].password, "");
-    registry.uinf[0].user_type = XUT_Root;
-    strncpy(registry.uinf[1].name, username, sizeof(registry.uinf[1].name) - 1);
-    strncpy(registry.uinf[1].password, password, sizeof(registry.uinf[1].password) - 1);
-    registry.uinf[1].user_type = XUT_Admin;
-
     vfs_resize(file, 0);
-    size_t wrote = vfs_write(file, &registry, 0, sizeof(registry));
+    size_t wrote = vfs_write(file, (void *)registry, 0, sizeof(*registry));
     vfs_close(file);
-    return wrote == sizeof(registry);
+    return wrote == sizeof(*registry);
 }
 
-static void set_current_user_from_info(UserInfo *info)
+static bool user_registry_migrate_legacy(UserRegisterList *registry, const LegacyUserRegisterList *legacy,
+                                         size_t bytes_read)
+{
+    if (registry == NULL || legacy == NULL) return false;
+    if (bytes_read < offsetof(LegacyUserRegisterList, uinf)) return false;
+    if (legacy->user_count <= 1 || legacy->user_count > (int)USER_REGISTRY_MAX_USERS) return false;
+
+    user_registry_init_header(registry);
+    for (int i = 1; i < legacy->user_count && registry->user_count < USER_REGISTRY_MAX_USERS; i++)
+    {
+        size_t entry_end = offsetof(LegacyUserRegisterList, uinf) + ((size_t)i + 1U) * sizeof(LegacyUserInfo);
+        if (!user_legacy_login_entry_valid(&legacy->uinf[i], entry_end, bytes_read)) continue;
+
+        UserRegistryEntry *entry = &registry->uinf[registry->user_count];
+        memset(entry, 0, sizeof(*entry));
+        strncpy(entry->name, legacy->uinf[i].name, sizeof(entry->name) - 1);
+        entry->user_type = legacy->uinf[i].user_type;
+        entry->user_prms = legacy->uinf[i].user_prms;
+        if (!user_registry_entry_set_password(entry, legacy->uinf[i].password)) continue;
+        registry->user_count++;
+    }
+
+    return registry->user_count > 1;
+}
+
+static bool user_registry_needs_oobe(const UserRegisterList *urf_data, size_t bytes_read)
+{
+    if (urf_data == NULL) return true;
+    if (!user_registry_header_valid(urf_data, bytes_read)) return true;
+    if (urf_data->user_count <= 1 || urf_data->user_count > USER_REGISTRY_MAX_USERS) return true;
+    for (uint32_t i = 1; i < urf_data->user_count; i++)
+    {
+        if (user_registry_login_entry_valid(&urf_data->uinf[i])) return false;
+    }
+    return true;
+}
+
+static bool user_registry_has_real_user(const UserRegisterList *registry)
+{
+    if (registry == NULL || registry->user_count <= 1 || registry->user_count > USER_REGISTRY_MAX_USERS) return false;
+    for (uint32_t i = 1; i < registry->user_count; i++)
+    {
+        if (user_registry_login_entry_valid(&registry->uinf[i])) return true;
+    }
+    return false;
+}
+
+static const UserRegistryEntry *user_registry_first_user_matches(const UserRegisterList *registry,
+                                                                 const char *username,
+                                                                 const char *password)
+{
+    if (registry == NULL || username == NULL || password == NULL) return NULL;
+    if (registry->user_count <= 1 || registry->user_count > USER_REGISTRY_MAX_USERS) return NULL;
+
+    for (uint32_t i = 1; i < registry->user_count; i++)
+    {
+        if (!user_registry_login_entry_valid(&registry->uinf[i])) continue;
+        bool password_ok = user_registry_entry_password_matches(&registry->uinf[i], password);
+        if (strcmp(username, registry->uinf[i].name) == 0 && password_ok) return &registry->uinf[i];
+    }
+    return NULL;
+}
+
+static bool load_user_registry(UserRegisterList *registry, size_t *bytes_read)
+{
+    if (registry == NULL) return false;
+    memset(registry, 0, sizeof(UserRegisterList));
+    if (bytes_read != NULL) *bytes_read = 0;
+
+    vfs_node_t node = vfs_open("/system/config/usereg.dat");
+    if (node == NULL) return false;
+
+    size_t read_capacity = sizeof(UserRegisterList);
+    if (read_capacity < sizeof(LegacyUserRegisterList)) read_capacity = sizeof(LegacyUserRegisterList);
+    uint8_t *buffer = (uint8_t *)malloc(read_capacity);
+    if (buffer == NULL)
+    {
+        vfs_close(node);
+        return false;
+    }
+    memset(buffer, 0, read_capacity);
+
+    size_t read_size = vfs_read(node, buffer, 0, read_capacity);
+    vfs_close(node);
+    if (read_size == (size_t)VFS_STATUS_FAILED)
+    {
+        free(buffer);
+        return false;
+    }
+
+    bool loaded = false;
+    UserRegisterList *disk_registry = (UserRegisterList *)buffer;
+    if (user_registry_header_valid(disk_registry, read_size))
+    {
+        memcpy(registry, disk_registry, sizeof(*registry));
+        loaded = true;
+        if (bytes_read != NULL) *bytes_read = read_size;
+    }
+    else if (user_registry_migrate_legacy(registry, (LegacyUserRegisterList *)buffer, read_size))
+    {
+        write_user_registry(registry);
+        loaded = true;
+        if (bytes_read != NULL) *bytes_read = sizeof(*registry);
+    }
+
+    free(buffer);
+    return loaded;
+}
+
+static bool write_first_user_registry(const char *username, const char *password)
+{
+    if (username == NULL || password == NULL) return false;
+
+    UserRegisterList registry;
+    user_registry_init_header(&registry);
+    registry.user_count = 2;
+    strncpy(registry.uinf[1].name, username, sizeof(registry.uinf[1].name) - 1);
+    registry.uinf[1].user_type = XUT_Admin;
+    if (!user_registry_entry_set_password(&registry.uinf[1], password)) return false;
+
+    return write_user_registry(&registry);
+}
+
+static void set_current_user_from_info(const UserInfo *info)
 {
     if (info == NULL) return;
     if (current_user == NULL) current_user = (UserInfo *)malloc(sizeof(UserInfo));
     if (current_user == NULL) return;
     memset(current_user, 0, sizeof(UserInfo));
     strcpy(current_user->name, info->name);
-    strcpy(current_user->password, info->password);
+    current_user->user_prms = info->user_prms;
     current_user->user_type = info->user_type;
     current_user->envc      = 3;
     current_user->envp      = current_user_envp;
+}
+
+static void set_current_user_from_registry_entry(const UserRegistryEntry *entry)
+{
+    if (entry == NULL) return;
+    UserInfo info;
+    user_registry_entry_set_public(&info, entry);
+    set_current_user_from_info(&info);
 }
 
 void user_session_use_root()
@@ -612,11 +776,11 @@ int user_session_list(UserInfo *out, int max_count)
     if (user_registry_needs_oobe(&registry, bytes_read)) return 0;
 
     int copied = 0;
-    for (int i = 1; i < registry.user_count && i < 128; i++)
+    for (uint32_t i = 1; i < registry.user_count && i < USER_REGISTRY_MAX_USERS; i++)
     {
         if (!user_registry_login_entry_valid(&registry.uinf[i])) continue;
         if (copied >= max_count) break;
-        out[copied] = registry.uinf[i];
+        user_registry_entry_set_public(&out[copied], &registry.uinf[i]);
         copied++;
     }
     return copied;
@@ -631,51 +795,36 @@ int user_session_login(const char *username, const char *password)
     load_user_registry(&registry, &bytes_read);
     if (user_registry_needs_oobe(&registry, bytes_read)) return -ENOENT;
 
-    for (int i = 1; i < registry.user_count && i < 128; i++)
+    const UserRegistryEntry *authenticated = NULL;
+    for (uint32_t i = 1; i < registry.user_count && i < USER_REGISTRY_MAX_USERS; i++)
     {
         if (!user_registry_login_entry_valid(&registry.uinf[i])) continue;
-        if (strcmp(username, registry.uinf[i].name) != 0) continue;
-        if (strcmp(password, registry.uinf[i].password) != 0) return -EACCES;
-
-        set_current_user_from_info(&registry.uinf[i]);
-        if (current_user != NULL) init_user_profile(current_user->name);
-        return 0;
+        bool password_ok = user_registry_entry_password_matches(&registry.uinf[i], password);
+        if (strcmp(username, registry.uinf[i].name) == 0 && password_ok) authenticated = &registry.uinf[i];
     }
-    return -ENOENT;
+    if (authenticated == NULL) return -EACCES;
+
+    set_current_user_from_registry_entry(authenticated);
+    if (current_user != NULL) init_user_profile(current_user->name);
+    return 0;
 }
 
 int user_session_create_first(const char *username, const char *password)
 {
-    if (username == NULL || username[0] == '\0' || password == NULL || password[0] == '\0') return -EINVAL;
-    for (const char *p = username; *p != '\0'; p++)
-    {
-        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
-              (*p >= '0' && *p <= '9') || *p == '_' || *p == '-' || *p == ' '))
-            return -EINVAL;
-    }
+    if (!user_registry_name_ok(username) || password == NULL || password[0] == '\0') return -EINVAL;
+    if (strlen(password) >= USER_PASSWORD_INPUT_MAX) return -EINVAL;
 
     UserRegisterList registry;
     size_t           bytes_read = 0;
     load_user_registry(&registry, &bytes_read);
     if (!user_registry_needs_oobe(&registry, bytes_read))
     {
-        if (user_registry_first_user_matches(&registry, username, password))
+        const UserRegistryEntry *first_user = user_registry_first_user_matches(&registry, username, password);
+        if (first_user != NULL)
         {
-            UserInfo *first_user = NULL;
-            for (int i = 1; i < registry.user_count && i < 128; i++)
-            {
-                if (user_registry_login_entry_valid(&registry.uinf[i]))
-                {
-                    first_user = &registry.uinf[i];
-                    break;
-                }
-            }
-            if (first_user != NULL)
-            {
-                set_current_user_from_info(first_user);
-                if (current_user != NULL) init_user_profile(current_user->name);
-                return 0;
-            }
+            set_current_user_from_registry_entry(first_user);
+            if (current_user != NULL) init_user_profile(current_user->name);
+            return 0;
         }
         return -EEXIST;
     }
@@ -686,7 +835,6 @@ int user_session_create_first(const char *username, const char *password)
     UserInfo info;
     memset(&info, 0, sizeof(info));
     strncpy(info.name, username, sizeof(info.name) - 1);
-    strncpy(info.password, password, sizeof(info.password) - 1);
     info.user_type = XUT_Admin;
     set_current_user_from_info(&info);
     return 0;
@@ -775,18 +923,14 @@ static bool run_oobe()
             {
                 message = "两次输入的密码不一致。";
             }
-            else if (!write_first_user_registry(username, password) || !init_user_profile(username))
+            else if (user_session_create_first(username, password) != 0)
             {
                 message = "创建账户失败，请检查磁盘。";
             }
             else
             {
-                UserInfo info;
-                memset(&info, 0, sizeof(info));
-                strncpy(info.name, username, sizeof(info.name) - 1);
-                strncpy(info.password, password, sizeof(info.password) - 1);
-                info.user_type = XUT_Admin;
-                set_current_user_from_info(&info);
+                user_password_clear(password, sizeof(password));
+                user_password_clear(confirm, sizeof(confirm));
                 draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1,
                           {0x0f, 0x4c, 0x9a, 0xff});
                 print_box_ttf(sht_img, desktop_ct_sheet, "账户已创建，正在进入桌面。", WHITE, 64, 64, 18);
@@ -966,7 +1110,7 @@ void init_user()
                 // 检查密码
 check_password:
                 input_password[input_count] = '\0';
-                if (strcmp(input_password, urf_data->uinf[current_user_number].password) == 0)
+                if (user_session_login(urf_data->uinf[current_user_number].name, input_password) == 0)
                 {
                     break;
                 }
@@ -980,8 +1124,7 @@ check_password:
         }
     }
 
-    set_current_user_from_info(&urf_data->uinf[current_user_number]);
-    if (current_user != NULL) init_user_profile(current_user->name);
+    user_password_clear(input_password, sizeof(input_password));
 #else
     user_session_use_root();
 #endif

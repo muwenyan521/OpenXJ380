@@ -928,26 +928,62 @@ spin_t get_path_lock = SPIN_INIT;
 // 使用请记得free掉返回的buff
 char *vfs_get_fullpath(vfs_node_t node) {
     if (node == NULL) return NULL;
-    int inital = 32;
+    int capacity = 32;
     spin_lock(&get_path_lock);
-    vfs_node_t *nodes = (vfs_node_t *)malloc(sizeof(vfs_node_t) * inital);
-    // not_null_assets(nodes, "vfs_get_fullpath: null alloc.");
+    vfs_node_t *nodes = (vfs_node_t *)malloc(sizeof(vfs_node_t) * capacity);
+    if (nodes == NULL) {
+        spin_unlock(&get_path_lock);
+        return NULL;
+    }
     int count = 0;
     for (vfs_node_t cur = node; cur; cur = cur->parent) {
-        if (count >= inital) {
-            inital *= 2;
-            nodes   = (vfs_node_t *)realloc((void *)nodes, (size_t)(sizeof(vfs_node_t) * inital));
+        if (count >= capacity) {
+            if (capacity > INT_MAX / 2) {
+                free(nodes);
+                spin_unlock(&get_path_lock);
+                return NULL;
+            }
+            capacity *= 2;
+            vfs_node_t *grown = (vfs_node_t *)realloc((void *)nodes, sizeof(vfs_node_t) * (size_t)capacity);
+            if (grown == NULL) {
+                free(nodes);
+                spin_unlock(&get_path_lock);
+                return NULL;
+            }
+            nodes = grown;
         }
         nodes[count++] = cur;
     }
-    // 正常的路径都不应该超过这个数值
-    char *buff = (char *)malloc(256);
-    strcpy(buff, "/");
+
+    size_t path_length = 1;
     for (int j = count - 1; j >= 0; j--) {
         if (nodes[j] == rootdir) continue;
-        strcat(buff, nodes[j]->name);
-        if (j != 0) strcat(buff, "/");
+        size_t name_length = strlen(nodes[j]->name);
+        size_t separator_length = j != 0 ? 1 : 0;
+        if (name_length > (size_t)-1 - path_length - separator_length) {
+            free(nodes);
+            spin_unlock(&get_path_lock);
+            return NULL;
+        }
+        path_length += name_length + separator_length;
     }
+
+    char *buff = (char *)malloc(path_length + 1);
+    if (buff == NULL) {
+        free(nodes);
+        spin_unlock(&get_path_lock);
+        return NULL;
+    }
+    size_t offset = 0;
+    buff[offset++] = '/';
+    for (int j = count - 1; j >= 0; j--) {
+        if (nodes[j] == rootdir) continue;
+        size_t name_length = strlen(nodes[j]->name);
+        memcpy(buff + offset, nodes[j]->name, name_length);
+        offset += name_length;
+        if (j != 0) buff[offset++] = '/';
+    }
+    buff[offset] = '\0';
     free(nodes);
     spin_unlock(&get_path_lock);
     return buff;

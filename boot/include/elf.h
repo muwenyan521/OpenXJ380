@@ -33,24 +33,55 @@ typedef struct
     UINT16 e_shstrndx;  /* Section header string table index */
 } Elf64_Ehdr;
 
-void CalcLoadAddressRange(Elf64_Ehdr *ehdr, UINT64 *first, UINT64 *last)
+static inline BOOLEAN ElfRangeValid(UINT64 offset, UINT64 length, UINT64 limit)
 {
-    Elf64_Phdr *phdr = (Elf64_Phdr *)((UINT64)ehdr + ehdr->e_phoff); // 第一个 program header 地址
-    *first = 0xffffffffffffffff;                                     // UINT64最大值
-    *last = 0;                                                       // UINT64最小值
-
-    for (UINT16 i = 0; i < ehdr->e_phnum; i++)
-    { // 遍历每一个 program header
-        if (phdr[i].p_type != PT_LOAD)
-            continue; // 只关心LOAD段
-        *first = min(*first, phdr[i].p_vaddr);
-        *last = max(*last, phdr[i].p_vaddr + phdr[i].p_memsz); // 每一个program header首尾取最值
-    }
+    return offset <= limit && length <= limit - offset;
 }
 
-void CopyLoadSegments(Elf64_Ehdr *ehdr)
+static inline BOOLEAN ValidateElf64Image(const VOID *image, UINTN image_size, UINT64 allowed_first,
+                                         UINT64 allowed_last, UINT64 *first, UINT64 *last)
 {
-    Elf64_Phdr *phdr = (Elf64_Phdr *)((UINT64)ehdr + ehdr->e_phoff); // 第一个 program header 地址
+    if (image == 0 || first == 0 || last == 0 || image_size < sizeof(Elf64_Ehdr)) return 0;
+
+    const Elf64_Ehdr *ehdr = (const Elf64_Ehdr *)image;
+    if (ehdr->e_ident[0] != 0x7f || ehdr->e_ident[1] != 'E' || ehdr->e_ident[2] != 'L' ||
+        ehdr->e_ident[3] != 'F' || ehdr->e_ident[4] != 2 || ehdr->e_ident[5] != 1 || ehdr->e_type != 2 ||
+        ehdr->e_machine != 62 || ehdr->e_version != 1 || ehdr->e_ehsize != sizeof(Elf64_Ehdr) ||
+        ehdr->e_phentsize != sizeof(Elf64_Phdr) || ehdr->e_phnum == 0 || allowed_first >= allowed_last)
+        return 0;
+
+    UINT64 program_headers_size = (UINT64)ehdr->e_phnum * sizeof(Elf64_Phdr);
+    if (!ElfRangeValid(ehdr->e_phoff, program_headers_size, image_size)) return 0;
+
+    const Elf64_Phdr *phdr        = (const Elf64_Phdr *)((const UINT8 *)image + ehdr->e_phoff);
+    UINT64            load_first  = 0xffffffffffffffff;
+    UINT64            load_last   = 0;
+    BOOLEAN           entry_found = 0;
+
+    for (UINT16 i = 0; i < ehdr->e_phnum; i++)
+    {
+        if (phdr[i].p_type != PT_LOAD) continue;
+        if (phdr[i].p_filesz > phdr[i].p_memsz ||
+            !ElfRangeValid(phdr[i].p_offset, phdr[i].p_filesz, image_size) ||
+            phdr[i].p_vaddr < allowed_first || phdr[i].p_vaddr >= allowed_last ||
+            phdr[i].p_memsz > allowed_last - phdr[i].p_vaddr)
+            return 0;
+
+        UINT64 segment_last = phdr[i].p_vaddr + phdr[i].p_memsz;
+        load_first = min(load_first, phdr[i].p_vaddr);
+        load_last  = max(load_last, segment_last);
+        if (ehdr->e_entry >= phdr[i].p_vaddr && ehdr->e_entry < segment_last) entry_found = 1;
+    }
+
+    if (load_first == 0xffffffffffffffff || load_last <= load_first || !entry_found) return 0;
+    *first = load_first;
+    *last  = load_last;
+    return 1;
+}
+
+static inline void CopyLoadSegments(const Elf64_Ehdr *ehdr)
+{
+    const Elf64_Phdr *phdr = (const Elf64_Phdr *)((UINT64)ehdr + ehdr->e_phoff);
     for (UINT16 i = 0; i < ehdr->e_phnum; i++)
     { // 遍历每一个 program header
         if (phdr[i].p_type != PT_LOAD)

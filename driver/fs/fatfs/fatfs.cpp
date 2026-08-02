@@ -657,12 +657,40 @@ void *fatfs_map(void *file, void *addr, size_t offset, size_t size, size_t prot,
 }
 
 vfs_node_t fatfs_dup(vfs_node_t node) {
-    vfs_node_t copy   = vfs_node_alloc(node->parent, node->name);
-    file_t     src    = (file_t)node->handle;
-    file_t     tar    = (file_t)malloc(sizeof(struct file));
-    tar->path         = strdup(src->path);
-    tar->handle       = src->handle;
-    tar->is_dir       = src->is_dir;
+    if (node == NULL || node->handle == NULL) return NULL;
+
+    file_t src = (file_t)node->handle;
+    file_t tar = (file_t)calloc(1, sizeof(struct file));
+    if (tar == NULL) return NULL;
+    tar->path = strdup(src->path);
+    tar->is_dir = src->is_dir;
+    if (tar->path == NULL) {
+        free(tar);
+        return NULL;
+    }
+
+    FRESULT result;
+    fatfs_lock();
+    if (tar->is_dir) {
+        tar->handle = malloc(sizeof(DIR));
+        result = tar->handle == NULL ? FR_NOT_ENOUGH_CORE : f_opendir((DIR *)tar->handle, tar->path);
+    } else {
+        tar->handle = malloc(sizeof(FIL));
+        result = tar->handle == NULL ? FR_NOT_ENOUGH_CORE : f_open((FIL *)tar->handle, tar->path, FA_READ | FA_WRITE);
+    }
+    fatfs_unlock();
+    if (result != FR_OK) {
+        free(tar->handle);
+        free(tar->path);
+        free(tar);
+        return NULL;
+    }
+
+    vfs_node_t copy = vfs_node_alloc(node->parent, node->name);
+    if (copy == NULL) {
+        fatfs_close(tar);
+        return NULL;
+    }
     copy->handle      = tar;
     copy->type        = node->type;
     copy->size        = node->size;

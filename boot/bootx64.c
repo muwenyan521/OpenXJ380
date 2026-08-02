@@ -1026,8 +1026,14 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     boot_status("Mapping kernel image");
 
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)kernel_buffer;
-    UINT64      kernel_first_addr, kernel_last_addr;                   // 计算的首尾
-    CalcLoadAddressRange(ehdr, &kernel_first_addr, &kernel_last_addr); // 计算范围
+    UINT64      kernel_first_addr, kernel_last_addr;
+    if (!ValidateElf64Image(kernel_buffer, kernel_size, 0xffffffff80000000ULL, 0xffffffffb0000000ULL,
+                            &kernel_first_addr, &kernel_last_addr))
+    {
+        write_serial_string("Kernel ELF validation failed. Stop.\n");
+        while (1)
+            ;
+    }
 
     MapVirtToPhys(kernel_first_addr, kernel_last_addr - kernel_first_addr);
 
@@ -1052,8 +1058,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     struct FrameBufferConfig config = {(UINT8 *)(GOP->Mode->FrameBufferBase + 0xffff800000000000),
                                        GOP->Mode->Info->PixelsPerScanLine, GOP->Mode->Info->HorizontalResolution,
                                        GOP->Mode->Info->VerticalResolution, kRGBR};
+    char number_buffer[21];
     write_serial_string("Frame Buffer Phys Addr: ");
-    write_serial_string(Hex2Char((UINT64)(config.frame_buffer)));
+    Hex2Char((UINT64)(config.frame_buffer), number_buffer, sizeof(number_buffer));
+    write_serial_string(number_buffer);
     write_serial_string("\n");
 
     switch (GOP->Mode->Info->PixelFormat)
@@ -1103,10 +1111,12 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             {
                 write_serial_string("ACPI Table Found Success.\n");
                 write_serial_string("ACPI Version: ");
-                write_serial_string(Dec2Char(AcpiRsdp->version));
+                Dec2Char(AcpiRsdp->version, number_buffer, sizeof(number_buffer));
+                write_serial_string(number_buffer);
                 write_serial_string("\n");
                 write_serial_string("XSDT Address: ");
-                write_serial_string(Hex2Char(AcpiRsdp->XsdtAddr));
+                Hex2Char(AcpiRsdp->XsdtAddr, number_buffer, sizeof(number_buffer));
+                write_serial_string(number_buffer);
                 write_serial_string("\n");
                 BootConfig->is_qemu = check_qemu(AcpiRsdp->OEMID);
 
@@ -1119,14 +1129,16 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
                 for (UINT64 j = 0; j < Entries; j++, AcpiTableEntryPtr++)
                 {
                     write_serial_string("SDT Entry ");
-                    write_serial_string(Dec2Char(j));
+                    Dec2Char(j, number_buffer, sizeof(number_buffer));
+                    write_serial_string(number_buffer);
                     write_serial_string(":\n");
 
                     ACPI_TABLE_HEADER *AcpiSdtPointer =
                         (ACPI_TABLE_HEADER *)(*AcpiTableEntryPtr); // 指向其他SDT的表头的指针
 
                     write_serial_string("SDT Address: ");
-                    write_serial_string(Hex2Char((UINT64)(AcpiTableEntryPtr)));
+                    Hex2Char((UINT64)(AcpiTableEntryPtr), number_buffer, sizeof(number_buffer));
+                    write_serial_string(number_buffer);
                     write_serial_string("\n");
                     write_serial_string(AcpiSdtPointer->sign);
                     write_serial_string("\n");
