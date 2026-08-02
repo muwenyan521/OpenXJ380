@@ -60,6 +60,28 @@ class GenNinjaDependencyTests(unittest.TestCase):
             self.text,
         )
 
+    def test_rust_target_libdir_override_avoids_host_specific_rustup_probe(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            libdir = Path(tmp)
+            (libdir / "libcore-test.rlib").write_bytes(b"core")
+            (libdir / "libcompiler_builtins-test.rlib").write_bytes(b"builtins")
+            out = libdir / "build.ninja"
+            env = os.environ.copy()
+            env["RUSTC"] = str(libdir / "missing-rustc")
+            env["RUST_TARGET_LIBDIR"] = str(libdir)
+            env["RUST_TARGET"] = "x86_64-unknown-none"
+
+            subprocess.run(
+                ["python3", "tools/gen_ninja.py", "--out", str(out)],
+                cwd=ROOT,
+                env=env,
+                check=True,
+            )
+
+            text = out.read_text(encoding="utf-8")
+            self.assertIn(f"rustc = {libdir / 'missing-rustc'}\n", text)
+            self.assertIn("rust_target = x86_64-unknown-none\n", text)
+
 
 class GenNinjaLogTests(unittest.TestCase):
     @classmethod

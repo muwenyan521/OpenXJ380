@@ -125,7 +125,6 @@ def stage_linux_compat(root: Path) -> None:
     if (ROOT / "lolcat_100.0.1-3_all.deb").exists():
         cp(ROOT / "lolcat_100.0.1-3_all.deb", root / "apps/lolcat.deb")
     cp(env("APP_FASTFETCH", "resources/apps/fastfetch"), root / "apps/fastfetch")
-    cp(ROOT / "1.c", root / "apps/1.c")
 
     stage_env = {
         "IMAGE_TOOLCHAIN": env("IMAGE_TOOLCHAIN", "clang"),
@@ -597,7 +596,9 @@ def check_tools() -> None:
 
     if rustc:
         rust_target = env("RUST_TARGET", "x86_64-unknown-none")
-        libdir = capture([rustc, "--print", "target-libdir", "--target", rust_target])
+        libdir = env("RUST_TARGET_LIBDIR", "")
+        if not libdir:
+            libdir = capture([rustc, "--print", "target-libdir", "--target", rust_target])
         rust_libs_ok = False
         if libdir:
             rust_libs_ok = bool(list(Path(libdir).glob("libcore-*.rlib"))) and bool(
@@ -608,7 +609,7 @@ def check_tools() -> None:
         else:
             print(f"[缺失] rust target {rust_target:14} 编译 Rust no_std 用户态应用需要该目标")
             missing.append((f"rust target {rust_target}", "缺少 libcore/libcompiler_builtins",
-                            f"rustup target add {rust_target}"))
+                            f"rustup target add {rust_target} 或设置 RUST_TARGET_LIBDIR"))
 
     builtins, builtins_source = find_browser_builtins(clang)
     if builtins:

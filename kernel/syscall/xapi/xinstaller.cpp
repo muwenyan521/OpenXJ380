@@ -1042,7 +1042,6 @@ static bool installer_should_skip_linux_compat_path(const char *rel)
     if (installer_path_is_or_under(rel, "/apps/fastfetch")) return true;
     if (installer_path_is_or_under(rel, "/apps/dyn-hello")) return true;
     if (installer_path_is_or_under(rel, "/apps/lolcat.deb")) return true;
-    if (installer_path_is_or_under(rel, "/apps/1.c")) return true;
     if (installer_path_is_or_under(rel, "/lib/ld-linux-x86-64.so.2")) return true;
     if (installer_path_is_or_under(rel, "/lib/ld-musl-x86_64.so.1")) return true;
     if (installer_path_is_or_under(rel, "/lib/libc.so")) return true;

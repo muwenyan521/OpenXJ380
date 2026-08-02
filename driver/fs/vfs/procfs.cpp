@@ -27,8 +27,7 @@ static vfs_node_t procfs_current_self_target()
     return task->parent_group->procfs_node;
 }
 
-const char filesystems_content[] = //"nodev\tsysfs\n"
-    "nodev\ttmpfs\n"
+const char filesystems_content[] = "nodev\ttmpfs\n"
     "nodev\tproc\n"
     "nodev\tmodfs\n"
     "     \text4\n"

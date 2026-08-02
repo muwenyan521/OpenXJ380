@@ -144,13 +144,17 @@ def find_rustc() -> str:
 
 def rust_target_libs(rustc: str, target: str) -> list[Path]:
     """Resolve libcore/compiler_builtins for no_std Rust user apps at gen time."""
-    if not rustc:
+    libdir_override = os.environ.get("RUST_TARGET_LIBDIR")
+    if libdir_override:
+        libdir = libdir_override
+    elif not rustc:
         raise SystemExit("缺少 Rust 编译器：请安装 rustup/rustc，或设置 RUSTC=/path/to/rustc")
-    libdir = cmd_output([rustc, "--print", "target-libdir", "--target", target])
+    else:
+        libdir = cmd_output([rustc, "--print", "target-libdir", "--target", target])
     if not libdir:
         raise SystemExit(
             f"无法查询 Rust 目标库目录：{target}\n"
-            f"请先运行：rustup target add {target}\n"
+            f"请先运行：rustup target add {target}，或设置 RUST_TARGET_LIBDIR=/path/to/rustlib\n"
             "如果已经安装，请确认 RUSTC 指向同一个 rustup 工具链，然后运行：ninja reconfigure"
         )
     libs: list[Path] = []

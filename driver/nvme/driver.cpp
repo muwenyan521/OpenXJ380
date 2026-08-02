@@ -1,4 +1,5 @@
 #include <device.h>
+#include <errno.h>
 #include <proto.hpp>
 #include <nvme/nvme.h>
 #include <ioctl.h>
@@ -17,22 +18,20 @@
 #define NVME_ADMIN_IDENTIFY_CNS_ID_CTRL 0x01U
 #define NVME_ADMIN_IDENTIFY_CNS_ACT_NSL 0x02U
 
-// static inline char *LeadingWhitespace(char *beg, char *end)
-// {
-//     while (end > beg && *--end <= 0x20)
-//     {
-//         *end = 0;
-//     }
-//     while (beg < end && *beg <= 0x20)
-//     {
-//         beg++;
-//     }
-//     return beg;
-// }
+#define NVME_NSEC_PER_MSEC 1000000ULL
+#define NVME_READY_TIMEOUT_FALLBACK_NS (5ULL * 1000ULL * NVME_NSEC_PER_MSEC)
+#define NVME_COMMAND_TIMEOUT_NS (30ULL * 1000ULL * NVME_NSEC_PER_MSEC)
+
+static uint64_t nvme_ready_timeout_ns(NVME_CONTROLLER *ctrl)
+{
+    if (ctrl != NULL && ctrl->WTO != 0) return (uint64_t)ctrl->WTO * NVME_NSEC_PER_MSEC;
+    return NVME_READY_TIMEOUT_FALLBACK_NS;
+}
 
 void NVMEConfigureQ(NVME_CONTROLLER *ctrl, NVME_QUEUE_COMMON *q, uint32_t idx, uint32_t len)
 {
     memset(q, 0, sizeof(NVME_QUEUE_COMMON));
+    q->CTR = ctrl;
     q->DBL = (uint32_t *)(((uint8_t *)ctrl->CAP) + 0x1000 + idx * ctrl->DST);
     q->MSK = len - 1;
 }
@@ -63,9 +62,29 @@ int NVMEConfigureSQ(NVME_CONTROLLER *ctrl, NVME_SUBMISSION_QUEUE *sq, uint32_t i
 }
 int NVMEWaitingRDY(NVME_CONTROLLER *ctrl, uint32_t rdy)
 {
-    uint32_t csts;
+    if (ctrl == NULL || ctrl->CAP == NULL)
+    {
+        write_serial_fmt("NVME: controller ready wait received invalid controller\n");
+        return -EINVAL;
+    }
+
+    uint64_t start      = nanoTime();
+    uint64_t timeout_ns = nvme_ready_timeout_ns(ctrl);
+    uint32_t csts       = 0;
     while (rdy != ((csts = ctrl->CAP->CST) & NVME_CSTS_RDY))
     {
+        if (csts & NVME_CSTS_FATAL)
+        {
+            write_serial_fmt("NVME: controller fatal status while waiting ready=%u csts=%#010lx\n", rdy, csts);
+            return -EIO;
+        }
+        if (nanoTime() - start >= timeout_ns)
+        {
+            write_serial_fmt(
+                "NVME: controller ready timeout ready=%u csts=%#010lx elapsed_ns=%llu timeout_ns=%llu\n", rdy, csts,
+                nanoTime() - start, timeout_ns);
+            return -ETIME;
+        }
         cpu_relax();
     }
     return 0;
@@ -73,7 +92,8 @@ int NVMEWaitingRDY(NVME_CONTROLLER *ctrl, uint32_t rdy)
 NVME_COMPLETION_QUEUE_ENTRY NVMEWaitingCMD(NVME_SUBMISSION_QUEUE *sq, NVME_SUBMISSION_QUEUE_ENTRY *e)
 {
     NVME_COMPLETION_QUEUE_ENTRY errcqe;
-    memset(&errcqe, 0xFF, sizeof(NVME_COMPLETION_QUEUE_ENTRY));
+    memset(&errcqe, 0, sizeof(NVME_COMPLETION_QUEUE_ENTRY));
+    errcqe.STS = 0xFFFF;
 
     if (((sq->COM.TAL + 1) % (sq->COM.MSK + 1ULL)) == sq->COM.HAD)
     {
@@ -82,9 +102,11 @@ NVME_COMPLETION_QUEUE_ENTRY NVMEWaitingCMD(NVME_SUBMISSION_QUEUE *sq, NVME_SUBMI
     }
 
     // Commit
+    uint16_t cid                         = sq->COM.TAL;
     NVME_SUBMISSION_QUEUE_ENTRY *sqe = sq->SQE + sq->COM.TAL;
     memcpy(sqe, e, sizeof(NVME_SUBMISSION_QUEUE_ENTRY));
-    sqe->CDW0 |= (uint32_t)sq->COM.TAL << 16;
+    sqe->CDW0 |= (uint32_t)cid << 16;
+    errcqe.CID = cid;
 
     // Doorbell
     sq->COM.TAL++;
@@ -93,8 +115,26 @@ NVME_COMPLETION_QUEUE_ENTRY NVMEWaitingCMD(NVME_SUBMISSION_QUEUE *sq, NVME_SUBMI
 
     // Check completion
     NVME_COMPLETION_QUEUE *cq = sq->ICQ;
+    uint64_t start            = nanoTime();
     while ((cq->CQE[cq->COM.HAD].STS & 0x1) != cq->COM.PHA)
     {
+        NVME_CONTROLLER *ctrl = sq->COM.CTR;
+        uint32_t csts         = (ctrl != NULL && ctrl->CAP != NULL) ? ctrl->CAP->CST : 0;
+        if (csts & NVME_CSTS_FATAL)
+        {
+            write_serial_fmt(
+                "NVME: command fatal status cid=%u sq_head=%u sq_tail=%u cq_head=%u phase=%u csts=%#010lx\n", cid,
+                sq->COM.HAD, sq->COM.TAL, cq->COM.HAD, cq->COM.PHA, csts);
+            return errcqe;
+        }
+        if (nanoTime() - start >= NVME_COMMAND_TIMEOUT_NS)
+        {
+            write_serial_fmt(
+                "NVME: command timeout cid=%u sq_head=%u sq_tail=%u cq_head=%u phase=%u csts=%#010lx elapsed_ns=%llu timeout_ns=%llu\n",
+                cid, sq->COM.HAD, sq->COM.TAL, cq->COM.HAD, cq->COM.PHA, csts, nanoTime() - start,
+                NVME_COMMAND_TIMEOUT_NS);
+            return errcqe;
+        }
         cpu_relax();
     }
 

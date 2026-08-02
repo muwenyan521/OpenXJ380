@@ -28,7 +28,7 @@ lib/                   基础支持代码
 kmod/                  可加载内核模块
 user/                  用户态应用、XAPI 运行时和浏览器
 resources/             写入系统资源目录的文件
-Bf/                    镜像和软件包制作所需的静态资源
+Bf/                    可由 prepare 生成的镜像/软件包本地缓存（源码构建不依赖）
 third_party/           引入的第三方代码
 ```
 
@@ -50,6 +50,9 @@ sudo apt install -y \
 python3 tools/gen_ninja.py --out build.ninja
 ninja -f build.ninja check.tools
 ```
+
+
+Rust no-std 目标库可通过 `RUST_TARGET_LIBDIR` 显式指定，避免构建图生成依赖开发者个人 rustup 路径。详细说明见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
 浏览器、`httpget` 和 `nut` 等目标需要 Clang 的 `libclang_rt.builtins-x86_64.a`。若工具检查未能自动找到该文件，请设置：
 
@@ -119,6 +122,7 @@ DEBUG=0 SMP=2 SUDO=0 KVM=0 DISPLAY_BACKEND=gtk ninja -f build.ninja run
 - 用户态程序位于 `user/`，通过 `user/xapi/` 提供的运行时和 API 链接。
 - `third_party/`、`user/browser/third_party/` 和 `kmod/netserver/lwip/` 中的代码来自上游，除非进行有计划的上游同步，否则不要直接修改。
 - `kernel/build_config.h` 和 `.clangd` 是生成文件，不应手动维护。
+- 架构边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，可复现构建和镜像资源说明见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
 版本信息目前需要同时更新 `tools/stage_image_base.sh` 与 `kernel/build_settings.h`。
 

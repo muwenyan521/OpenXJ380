@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -58,6 +59,25 @@ class NinjaBuildSourceToolTests(unittest.TestCase):
             ],
             commands,
         )
+
+
+class NinjaBuildImageResourceTests(unittest.TestCase):
+    def test_default_image_staging_helpers_are_available(self) -> None:
+        # Given: the default vdisk/prepare configuration from tools.ninja_build.
+        helper_paths = (
+            "tools/stage_image_xbps.sh",
+            "tools/stage_xbps_bootstrap.sh",
+            "tools/stage_prepared_root.sh",
+            "tools/stage_elf_deps.sh",
+            "tools/stage_image_toolchain.sh",
+        )
+
+        # Then: every referenced helper is part of the public source tree.
+        for helper_path in helper_paths:
+            self.assertTrue((ROOT / helper_path).is_file(), helper_path)
+
+        self.assertTrue(os.access(ROOT / "tools/stage_elf_deps.sh", os.X_OK))
+        self.assertTrue(os.access(ROOT / "tools/stage_xbps_bootstrap.sh", os.X_OK))
 
 
 if __name__ == "__main__":

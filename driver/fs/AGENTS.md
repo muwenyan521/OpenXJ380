@@ -15,7 +15,7 @@ driver/fs/
 |------|----------|-------|
 | VFS core | `vfs/vfs.cpp`, `include/fs/vfs/vfs.h` | Node operations, aliases, dispatch. |
 | FATFS port | `fatfs/ff.cpp`, `fatfs/ffunicode.cpp` | Large upstream-derived filesystem code. |
-| devfs/procfs/sysfs | `vfs/devfs.cpp`, `vfs/procfs.cpp`, `vfs/sys.cpp` | Kernel pseudo-files. |
+| devfs/procfs | `vfs/devfs.cpp`, `vfs/procfs.cpp` | Kernel pseudo-files. |
 | Pipes/PTY/tmp | `vfs/pipefs.cpp`, `vfs/pty.cpp`, `vfs/tmpfs.cpp` | Runtime pseudo-filesystems. |
 | Partition layer | `partition.cpp`, `include/fs/partition.h` | Root mount prerequisites. |
 

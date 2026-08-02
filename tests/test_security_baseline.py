@@ -203,6 +203,38 @@ class SecurityBaselineTests(unittest.TestCase):
 
         self.assertGreaterEqual(source.count("VFS_ACCESS_READ | VFS_ACCESS_EXECUTE"), 2)
 
+    def test_nvme_polling_paths_have_timeouts(self) -> None:
+        source = (ROOT / "driver/nvme/driver.cpp").read_text(encoding="utf-8")
+        ready_function = source.split("int NVMEWaitingRDY", 1)[1].split("NVME_COMPLETION_QUEUE_ENTRY", 1)[0]
+        command_function = source.split("NVME_COMPLETION_QUEUE_ENTRY NVMEWaitingCMD", 1)[1].split("void nvme_rwfail", 1)[0]
+
+        self.assertIn("nanoTime()", ready_function)
+        self.assertIn("nanoTime()", command_function)
+        self.assertIn("NVME: controller ready timeout", source)
+        self.assertIn("NVME: command timeout", source)
+
+    def test_retired_sample_and_commented_sysfs_sources_are_removed(self) -> None:
+        self.assertFalse((ROOT / "1.c").exists())
+        self.assertFalse((ROOT / "driver/fs/vfs/sys.cpp").exists())
+        self.assertFalse((ROOT / "include/fs/vfs/sys.h").exists())
+        self.assertFalse((ROOT / "kernel/syscall/fs.cpp").exists())
+        self.assertFalse((ROOT / "kernel/syscall/proc.cpp").exists())
+
+        ninja_build = (ROOT / "tools/ninja_build.py").read_text(encoding="utf-8")
+        self.assertNotIn('ROOT / "1.c"', ninja_build)
+
+        installer_source = (ROOT / "kernel/syscall/xapi/xinstaller.cpp").read_text(encoding="utf-8")
+        self.assertNotIn('/apps/1.c', installer_source)
+
+        procfs_source = (ROOT / "driver/fs/vfs/procfs.cpp").read_text(encoding="utf-8")
+        self.assertNotIn("sysfs", procfs_source.lower())
+
+        driver_fs_agents = (ROOT / "driver/fs/AGENTS.md").read_text(encoding="utf-8")
+        self.assertNotIn("sysfs", driver_fs_agents.lower())
+
+        syscall_agents = (ROOT / "kernel/syscall/AGENTS.md").read_text(encoding="utf-8")
+        self.assertNotIn("`fs.cpp`", syscall_agents)
+
 
 if __name__ == "__main__":
     unittest.main()
