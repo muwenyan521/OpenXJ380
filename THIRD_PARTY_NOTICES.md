@@ -26,8 +26,8 @@ generates a distributable bundle at `out/compliance/third-party`.
 | Rust alloc/compiler_builtins | Apache-2.0 OR MIT | `third_party/rust-runtime` |
 | BusyBox 1.31.1 | GPL-2.0-only | `third_party/busybox-source` |
 | MikanOS hankaku font | Apache-2.0 | `third_party/mikanos-hankaku/LICENSE`; `third_party/mikanos-hankaku/SOURCE.md`; `third_party/mikanos-hankaku/hankaku.txt`; `font/hankaku.bin` |
-| maple-font | SIL OPEN FONT LICENSE | `font/ttf/XJ380C.ttf` |
-| Source Han Sans font | SIL OPEN FONT LICENSE | `font/ttf/XJ380F.ttf` |
+| maple-font | OFL-1.1 | `font/ttf/LICENSES.md`; `font/ttf/XJ380C.ttf` |
+| Source Han Sans font | OFL-1.1 | `font/ttf/LICENSES.md`; `font/ttf/XJ380F.ttf` |
 
 The BusyBox bundle includes the complete upstream source archive, GPLv2 text,
 build configuration, compiler-compatibility patch, and rebuild instructions.

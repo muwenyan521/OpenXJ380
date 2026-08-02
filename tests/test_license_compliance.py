@@ -195,6 +195,36 @@ class LicenseComplianceTests(unittest.TestCase):
         self.assertIn("Xiaolai SC font", notices)
         self.assertIn("frameworks/StardustUI/fonts/LICENSES.md", notices)
 
+    def test_ttf_font_license_material_is_complete(self) -> None:
+        license_path = ROOT / "font/ttf/LICENSES.md"
+        fonts = {
+            "maple-font": ("maple-font", "font/ttf/XJ380C.ttf"),
+            "source-han-sans-font": ("Source Han Sans font", "font/ttf/XJ380F.ttf"),
+        }
+
+        license_text = license_path.read_text(encoding="utf-8")
+        self.assertIn("Copyright 2022 The Maple Mono Project Authors", license_text)
+        self.assertIn("Copyright 2014-2025 Adobe", license_text)
+        self.assertIn("SIL OPEN FONT LICENSE Version 1.1", license_text)
+
+        manifest = json.loads(
+            (ROOT / "third_party/compliance-manifest.json").read_text(encoding="utf-8")
+        )
+        components = {component["slug"]: component for component in manifest["components"]}
+        notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+        root_licenses = (ROOT / "LICENSES.md").read_text(encoding="utf-8")
+
+        for slug, (name, font_path) in fonts.items():
+            self.assertTrue((ROOT / font_path).is_file(), font_path)
+            component = components[slug]
+            self.assertEqual(name, component["name"])
+            self.assertEqual("OFL-1.1", component["license"])
+            self.assertEqual(["font/ttf/LICENSES.md"], component["license_files"])
+            self.assertEqual([font_path], component["source_files"])
+            self.assertIn(name, notices)
+            self.assertIn("font/ttf/LICENSES.md", notices)
+            self.assertIn(name, root_licenses)
+
     def test_third_party_manifest_references_existing_materials(self) -> None:
         manifest = json.loads(
             (ROOT / "third_party/compliance-manifest.json").read_text(encoding="utf-8")
